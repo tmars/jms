@@ -18,7 +18,9 @@ public class Chat implements MessageListener {
     private Connection connection;
     private Session pubSession;
     private Session subSession;
+    private Session replySession;
     private MessageProducer producer;
+    private MessageProducer replyProducer;
     private MessageConsumer consumer;
     private BufferedReader stdin;
     private String username = "";
@@ -35,6 +37,11 @@ public class Chat implements MessageListener {
             consumer = subSession.createConsumer(topic);
             consumer.setMessageListener(this);
             producer = pubSession.createProducer(topic);
+            producer.setDeliveryMode(DeliveryMode.PERSISTENT);
+
+            replySession = connection.createSession(true, Session.AUTO_ACKNOWLEDGE);
+            replyProducer = replySession.createProducer(null);
+            replyProducer.setDeliveryMode(DeliveryMode.NON_PERSISTENT);
 
             connection.start();
         } catch (JMSException e) {
@@ -73,14 +80,27 @@ public class Chat implements MessageListener {
                     return;
                 }
 
-                TextMessage textMessage = pubSession.createTextMessage();
-                textMessage.setText(username + ": " + msg);
-                producer.send(textMessage);
+                sendMessage(msg);
             } catch (IOException e) {
                 logger.error("Ошибка чтения данных", e);
-            } catch (JMSException e) {
-                logger.error("Ошибка JMS", e);
             }
+        }
+    }
+
+    private void sendMessage(String msg) {
+        try {
+            TextMessage textMessage = pubSession.createTextMessage();
+            textMessage.setText(username + ": " + msg);
+
+            Destination dest = subSession.createTemporaryQueue();
+            MessageConsumer responseConsumer = subSession.createConsumer(dest);
+
+            textMessage.setJMSReplyTo(dest);
+            textMessage.setJMSCorrelationID("sd");
+
+            producer.send(textMessage);
+        } catch (JMSException e) {
+            logger.error("Ошибка JMS", e);
         }
     }
 
@@ -98,6 +118,10 @@ public class Chat implements MessageListener {
 
     public void onMessage(Message message) {
         try {
+            Message response = replySession.createMessage();
+            response.setJMSCorrelationID(message.getJMSCorrelationID());
+            replyProducer.send(message.getJMSReplyTo(), response);
+
             TextMessage msg = (TextMessage) message;
             System.out.println(" > " + msg.getText());
         } catch (JMSException e) {
