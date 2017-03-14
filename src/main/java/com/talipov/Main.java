@@ -5,7 +5,8 @@ package com.talipov;
  */
 public class Main {
     public static void main(String[] args) {
-        new Thread(new Producer()).start();
-        new Thread(new Consumer()).start();
+        Chat chat = new Chat();
+        chat.init();
+        chat.work();
     }
 }
