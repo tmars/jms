@@ -1,6 +1,7 @@
 package com.talipov;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
+import org.apache.log4j.Logger;
 
 import javax.jms.*;
 import java.io.BufferedReader;
@@ -11,6 +12,7 @@ import java.io.InputStreamReader;
  * Created by Марсель on 14.03.2017.
  */
 public class Chat implements MessageListener {
+    private static final Logger logger = Logger.getLogger(Chat.class);
     private static final String CHAT_TOPIC = "chat";
 
     private Connection connection;
@@ -36,7 +38,9 @@ public class Chat implements MessageListener {
 
             connection.start();
         } catch (JMSException e) {
-            e.printStackTrace();
+            logger.error("Ошибка инициализации", e);
+            close();
+            return;
         }
 
         stdin = new BufferedReader(new InputStreamReader(System.in));
@@ -46,7 +50,7 @@ public class Chat implements MessageListener {
                 System.out.println("Введите пожалуйста имя пользователя: ");
                 username = stdin.readLine();
             } catch (IOException e) {
-                e.printStackTrace();
+                logger.error("Ошибка инициализации", e);
             }
         }
         System.out.println("Ваше имя пользователя: " + username);
@@ -55,7 +59,7 @@ public class Chat implements MessageListener {
 
     public void work() {
         if (!inited) {
-            System.out.println("Чат не инициализирован. Вызовите Chat.init()");
+            System.out.println("Чат не инициализирован.");
             return;
         }
 
@@ -73,18 +77,22 @@ public class Chat implements MessageListener {
                 textMessage.setText(username + ": " + msg);
                 producer.send(textMessage);
             } catch (IOException e) {
-                e.printStackTrace();
+                logger.error("Ошибка чтения данных", e);
             } catch (JMSException e) {
-                e.printStackTrace();
+                logger.error("Ошибка JMS", e);
             }
         }
     }
 
     private void close() {
         try {
-            connection.close();
+            if (connection != null) connection.close();
+            if (pubSession != null) pubSession.close();
+            if (subSession != null) subSession.close();
+            if (consumer != null) consumer.close();
+            if (producer != null) producer.close();
         } catch (JMSException e) {
-            e.printStackTrace();
+            logger.error("Ошибка закрытия соединения", e);
         }
     }
 
@@ -93,7 +101,7 @@ public class Chat implements MessageListener {
             TextMessage msg = (TextMessage) message;
             System.out.println(" > " + msg.getText());
         } catch (JMSException e) {
-            e.printStackTrace();
+            logger.error("Ошибка чтения данных", e);
         }
     }
 }
